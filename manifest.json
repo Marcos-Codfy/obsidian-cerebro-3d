@@ -1,0 +1,10 @@
+{
+  "id": "cerebro-3d",
+  "name": "Cérebro 3D",
+  "version": "3.4.0",
+  "minAppVersion": "1.5.0",
+  "description": "Veja seu vault como neurônios dentro de um cérebro anatômico 3D: áreas por lobo, axônios com sinais, linha do tempo cinematográfica e caminhos entre notas.",
+  "author": "Marcos Vinicius Muniz Arruda",
+  "isDesktopOnly": true,
+  "authorUrl": "https://github.com/Marcos-Codfy"
+}

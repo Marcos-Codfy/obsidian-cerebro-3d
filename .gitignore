@@ -1,0 +1,7 @@
+node_modules/
+main.js
+test/bundle.js
+test/dados.js
+test/config.local.json
+docs/midia/bruto/
+docs/PROGRESS.md
