@@ -29,12 +29,14 @@ function ffmpeg() {
 }
 
 class Gravador {
-  constructor(pagina, nome) {
+  constructor(pagina, nome, { limpar = true } = {}) {
     this.pagina = pagina;
     this.pasta = path.join(BRUTO, nome);
-    fs.rmSync(this.pasta, { recursive: true, force: true });
-    fs.mkdirSync(this.pasta, { recursive: true });
-    this.n = 0;
+    if (limpar) {
+      fs.rmSync(this.pasta, { recursive: true, force: true });
+      fs.mkdirSync(this.pasta, { recursive: true });
+    }
+    this.n = limpar ? 0 : fs.readdirSync(this.pasta).length;
   }
   async quadros(segundos) {
     for (let i = 0, total = Math.round(segundos * FPS); i < total; i++) {
@@ -47,12 +49,13 @@ class Gravador {
     if (sobra) await this.quadros(sobra);
   }
   /** Gera MP4 (alta qualidade) e GIF (otimizado com paleta) a partir dos quadros. */
-  exportar(nome, { larguraGif = 880, fpsGif = 16 } = {}) {
+  exportar(nome, { larguraGif = 760, fpsGif = 12, cores = 128 } = {}) {
     const ff = ffmpeg();
     const entrada = path.join(this.pasta, "%05d.png");
     const mp4 = path.join(MIDIA, `${nome}.mp4`), gif = path.join(MIDIA, `${nome}.gif`);
-    execFileSync(ff, ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", entrada, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart", mp4]);
-    const filtro = `fps=${fpsGif},scale=${larguraGif}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`;
+    // as partículas são "ruído" para o compressor: crf mais alto e preset lento mantêm o vídeo leve
+    execFileSync(ff, ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", entrada, "-c:v", "libx264", "-preset", "slow", "-pix_fmt", "yuv420p", "-crf", "27", "-movflags", "+faststart", mp4]);
+    const filtro = `fps=${fpsGif},scale=${larguraGif}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=${cores}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`;
     execFileSync(ff, ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", entrada, "-filter_complex", filtro, gif]);
     const mb = (f) => (fs.statSync(f).size / 1048576).toFixed(1) + " MB";
     console.log(`${nome}: ${this.n} quadros · mp4 ${mb(mp4)} · gif ${mb(gif)}`);
@@ -61,6 +64,12 @@ class Gravador {
 
 async function main() {
   fs.mkdirSync(MIDIA, { recursive: true });
+  if (process.argv.includes("--so-exportar")) {
+    // reaproveita os quadros já gravados em docs/midia/bruto
+    new Gravador(null, "linha-do-tempo", { limpar: false }).exportar("linha-do-tempo", { larguraGif: 680, fpsGif: 10, cores: 96 });
+    new Gravador(null, "interacao", { limpar: false }).exportar("interacao", { larguraGif: 680, fpsGif: 10, cores: 112 });
+    return;
+  }
   const servidor = await servir();
   const url = `http://localhost:${servidor.address().port}/test/index.html?demo`;
   // usa o Chrome instalado (GPU de verdade); sem ele, cai no Chromium do Playwright
@@ -70,8 +79,8 @@ async function main() {
   // relógio congelado: só avança quando pedimos (cada quadro = 1/FPS s), mesmo que a captura demore
   const inicio = new Date("2026-10-15T12:00:00");
   await pagina.clock.install({ time: inicio });
-  await pagina.goto(url);
   await pagina.clock.pauseAt(new Date(inicio.getTime() + 1000));
+  await pagina.goto(url);
   await pagina.clock.runFor(4000); // monta o cérebro e some a tela de carregamento
   const foto = (nome) => pagina.screenshot({ path: path.join(MIDIA, `${nome}.png`) });
   const js = (codigo) => pagina.evaluate(codigo);
@@ -87,7 +96,7 @@ async function main() {
   await play.quadros(4.5);
   await foto("linha-do-tempo-play");
   await play.ate("view.reprodutor.ativo", 30, 2.5);
-  play.exportar("linha-do-tempo");
+  play.exportar("linha-do-tempo", { larguraGif: 680, fpsGif: 10, cores: 96 });
 
   // 3) interação: selecionar, ver conexões, traçar caminho, focar uma área
   const inter = new Gravador(pagina, "interacao");
@@ -108,7 +117,7 @@ async function main() {
   await foto("ajustes-rapidos");
   await js("view.popovers.fecharTodos()");
   await inter.quadros(1);
-  inter.exportar("interacao", { larguraGif: 800, fpsGif: 14 });
+  inter.exportar("interacao", { larguraGif: 680, fpsGif: 10, cores: 112 });
 
   await navegador.close();
   servidor.close();
